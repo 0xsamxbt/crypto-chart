@@ -4,20 +4,13 @@ import CoinIcon from './CoinIcon';
 import { useInView } from '../hooks/useInView';
 import { usePriceFlash } from '../hooks/usePriceFlash';
 import { fmtCompact, fmtPrice } from '../utils/format';
+import ChartSkeleton from './ChartSkeleton';
 
 // The chart library (lightweight-charts) is the heaviest dependency: it gets its own chunk
 const loadPriceChart = () => import('./PriceChart');
 const PriceChart = lazy(loadPriceChart);
 
 const baseOf = (symbol) => symbol.replace(/USDT$/, '');
-
-function ChartSkeleton() {
-  return (
-    <div className="chart-skeleton" aria-busy="true">
-      <span>Loading chart…</span>
-    </div>
-  );
-}
 
 export default function ChartPanel({
   id,

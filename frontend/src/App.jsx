@@ -4,6 +4,7 @@ import { usePolling } from './hooks/usePolling';
 import { createChartSync } from './utils/chartSync';
 import { fmtPrice } from './utils/format';
 import ChartPanel from './components/ChartPanel';
+import ComparePanel from './components/ComparePanel';
 import LazySearchBox from './components/LazySearchBox';
 import MarketStats from './components/MarketStats';
 import Watchlist from './components/Watchlist';
@@ -35,7 +36,7 @@ function loadWatchlist() {
 function loadView() {
   try {
     const v = JSON.parse(localStorage.getItem(VIEW_KEY));
-    return { mode: v?.mode === 'dual' ? 'dual' : 'single', sync: v?.sync !== false };
+    return { mode: v?.mode === 'dual' || v?.mode === 'compare' ? v.mode : 'single', sync: v?.sync !== false };
   } catch {
     return { mode: 'single', sync: true };
   }
@@ -50,6 +51,12 @@ const IconDual = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
     <rect x="1.5" y="2.5" width="4.6" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
     <rect x="7.9" y="2.5" width="4.6" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+const IconCompare = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M1.5 10.5 5 6.5l2.8 2.2 4.7-5.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M1.5 4.8 5 7.5l3-1.6 3.5 3.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity=".55" />
   </svg>
 );
 const BrandMark = () => (
@@ -69,7 +76,7 @@ export default function App() {
     const w = loadWatchlist();
     return [w[0], w[1] ?? w[0]]; // coin shown in chart 1 and chart 2
   });
-  const [mode, setMode] = useState(() => loadView().mode); // 'single' | 'dual'
+  const [mode, setMode] = useState(() => loadView().mode); // 'single' | 'dual' | 'compare'
   const [syncOn, setSyncOn] = useState(() => loadView().sync);
   const [active, setActive] = useState(0); // chart that receives watchlist / search picks
   const [interval, setIntervalValue] = useState('1m');
@@ -77,6 +84,8 @@ export default function App() {
   const [updatedAt, setUpdatedAt] = useState(null);
 
   const dual = mode === 'dual';
+  const compare = mode === 'compare';
+  const multi = mode !== 'single'; // two coins at once
   const watchKey = watchlist.join(',');
 
   const syncHolder = useRef(null);
@@ -174,9 +183,11 @@ export default function App() {
     setWatchlist((w) => (w.includes(coin.symbol) || w.length >= MAX_WATCHLIST ? w : [...w, coin.symbol]));
   };
 
+  const swapCoins = () => setSymbols(([a, b]) => [b, a]);
+
   const removeCoin = (sym) => setWatchlist((w) => (w.length > 1 ? w.filter((s) => s !== sym) : w));
 
-  const panelIds = dual ? [0, 1] : [0];
+  const panelIds = multi ? [0, 1] : [0];
   const rows = watchlist.map((s) => tickers[s]).filter(Boolean);
 
   return (
@@ -191,7 +202,7 @@ export default function App() {
             </div>
           </div>
 
-          {!dual && <LazySearchBox watchlist={watchlist} max={MAX_WATCHLIST} onPick={addCoin} />}
+          {!multi && <LazySearchBox watchlist={watchlist} max={MAX_WATCHLIST} onPick={addCoin} />}
 
           <div className={`status ${status}`} role="status">
             <span className="dot" />
@@ -209,11 +220,14 @@ export default function App() {
           <section className="panel main" aria-label="Price chart">
             <div className="toolbar">
               <div className="seg" role="group" aria-label="View mode">
-                <button type="button" className={!dual ? 'on' : ''} onClick={() => setViewMode('single')}>
+                <button type="button" className={mode === 'single' ? 'on' : ''} onClick={() => setViewMode('single')}>
                   <IconSingle /> Single
                 </button>
                 <button type="button" className={dual ? 'on' : ''} onClick={() => setViewMode('dual')}>
                   <IconDual /> Dual
+                </button>
+                <button type="button" className={compare ? 'on' : ''} onClick={() => setViewMode('compare')}>
+                  <IconCompare /> Compare
                 </button>
               </div>
 
@@ -239,31 +253,48 @@ export default function App() {
               </div>
             </div>
 
-            {dual && (
+            {multi && (
               <div className="hint">
-                Use the search box on each chart to change its coin. Clicking a watchlist row loads it into the selected chart.
+                {compare
+                  ? 'Search to change either coin. Clicking a watchlist row loads it into the highlighted coin.'
+                  : 'Use the search box on each chart to change its coin. Clicking a watchlist row loads it into the selected chart.'}
               </div>
             )}
 
-            <div className={`charts ${dual ? 'dual' : ''}`}>
-              {panelIds.map((i) => (
-                <ChartPanel
-                  key={i}
-                  id={i}
-                  symbol={symbols[i]}
-                  tickers={tickers}
-                  watchlist={watchlist}
-                  maxWatchlist={MAX_WATCHLIST}
-                  interval={interval}
-                  dual={dual}
-                  active={active === i}
-                  sync={chartSync}
-                  pollMs={CHART_POLL_MS}
-                  onActivate={setActive}
-                  onPickCoin={addCoin}
-                />
-              ))}
-            </div>
+            {compare ? (
+              <ComparePanel
+                symbols={symbols}
+                tickers={tickers}
+                watchlist={watchlist}
+                maxWatchlist={MAX_WATCHLIST}
+                interval={interval}
+                active={active}
+                pollMs={CHART_POLL_MS}
+                onActivate={setActive}
+                onPickCoin={addCoin}
+                onSwap={swapCoins}
+              />
+            ) : (
+              <div className={`charts ${dual ? 'dual' : ''}`}>
+                {panelIds.map((i) => (
+                  <ChartPanel
+                    key={i}
+                    id={i}
+                    symbol={symbols[i]}
+                    tickers={tickers}
+                    watchlist={watchlist}
+                    maxWatchlist={MAX_WATCHLIST}
+                    interval={interval}
+                    dual={dual}
+                    active={active === i}
+                    sync={chartSync}
+                    pollMs={CHART_POLL_MS}
+                    onActivate={setActive}
+                    onPickCoin={addCoin}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           <aside className="panel side" aria-label="Watchlist">
