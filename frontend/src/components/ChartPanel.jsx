@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import LazySearchBox from './LazySearchBox';
 import CoinIcon from './CoinIcon';
-import { fmtPrice } from './PriceTable';
 import { useInView } from '../hooks/useInView';
+import { usePriceFlash } from '../hooks/usePriceFlash';
+import { fmtCompact, fmtPrice } from '../utils/format';
 
 // The chart library (lightweight-charts) is the heaviest dependency: it gets its own chunk
 const loadPriceChart = () => import('./PriceChart');
@@ -34,6 +35,7 @@ export default function ChartPanel({
 }) {
   const ticker = tickers[symbol];
   const base = baseOf(symbol);
+  const flash = usePriceFlash(ticker?.price, symbol);
 
   // Start downloading the chart code right away, but only create the chart (and start fetching
   // candles) once the panel is near the screen. Off-screen again -> polling pauses.
@@ -49,17 +51,20 @@ export default function ChartPanel({
     >
       <div className="head">
         <div className="head-main">
-          <CoinIcon base={base} image={ticker?.image} size={dual ? 36 : 44} />
-          <div>
+          <CoinIcon base={base} image={ticker?.image} size={dual ? 40 : 48} />
+          <div className="head-text">
             <div className="pair">
-              {ticker?.name && ticker.name !== base ? `${ticker.name} · ` : ''}{base} / USDT
+              <span className="coin-title">{ticker?.name && ticker.name !== base ? ticker.name : base}</span>
+              <span className="sym">{base} / USDT</span>
             </div>
-            <div className="big">{ticker ? `$${fmtPrice(ticker.price)}` : '—'}</div>
-            {ticker && (
-              <div className={ticker.change >= 0 ? 'pos' : 'neg'}>
-                {ticker.change >= 0 ? '+' : ''}{ticker.change.toFixed(2)}% (24h)
-              </div>
-            )}
+            <div className="price-row">
+              <span className={`big tick-${flash}`}>{ticker ? `$${fmtPrice(ticker.price)}` : '—'}</span>
+              {ticker && (
+                <span className={`badge ${ticker.change >= 0 ? 'up' : 'down'}`}>
+                  {ticker.change >= 0 ? '▲' : '▼'} {Math.abs(ticker.change).toFixed(2)}%
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -72,6 +77,12 @@ export default function ChartPanel({
           />
         )}
       </div>
+
+      <dl className="stats">
+        <div><dt>24h high</dt><dd>{ticker ? fmtPrice(ticker.high) : '—'}</dd></div>
+        <div><dt>24h low</dt><dd>{ticker ? fmtPrice(ticker.low) : '—'}</dd></div>
+        <div><dt>24h volume</dt><dd>{ticker ? `$${fmtCompact(ticker.volume)}` : '—'}</dd></div>
+      </dl>
 
       <div ref={slotRef} className="chart-slot">
         {seen ? (
